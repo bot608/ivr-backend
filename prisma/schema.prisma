@@ -1,0 +1,78 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  username     String   @unique
+  email        String   @unique
+  phone        String   @unique
+  password     String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  otp          String?
+  otpExpires   DateTime?
+  refreshToken String?
+  isVerified   Boolean  @default(false)
+  lastActive   DateTime?
+  fcmToken     String?
+}
+
+model CallerLookup {
+  id           String   @id @default(uuid())
+  phone            String
+  callerName       String
+  callerType       String
+  lineType         String
+  lineCategory     String
+  user_Id          String?
+  callTime         DateTime?
+  answered         Boolean?
+
+  // IVR Settings Fields
+  enableIVR        Boolean  @default(false)
+  blockedCalls     Boolean  @default(false)
+  newMessages      Boolean  @default(false)
+  weeklyReports    Boolean  @default(false)
+  notificationSound String?  // e.g., 'Ringtone 1'
+  ivrBehavior      String?   // e.g., 'Forward all unknown calls...'
+  ivrMessage       String?   // custom message
+  forwardToNumber  String?   // number to forward to
+}
+
+
+model Contact {
+  id        Int      @id @default(autoincrement())
+  name      String
+  phone     String
+  email     String?
+  address   String?
+  transcription String? 
+  block     Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  userId    String?
+}
+
+model PhoneNumberReport {
+  id        Int      @id @default(autoincrement())
+  userId    String
+  phone     String
+  content   String
+  createdAt DateTime @default(now())
+}
+
+model NotificationLog {
+  id        String   @id @default(uuid())
+  phone     String
+  fcmToken  String  
+  userId    String?
+  error     String? 
+  sentAt    DateTime @default(now())
+  status    String
+}
