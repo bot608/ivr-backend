@@ -4,7 +4,7 @@ const prisma = new PrismaClient();
 import twilio from 'twilio';
 import PDFDocument from 'pdfkit';
 const VoiceResponse = twilio.twiml.VoiceResponse;
-
+import cron from 'node-cron';
 
 let forwardToNumber = ''; 
 
@@ -22,14 +22,55 @@ export const setForwardingNumber = (req, res) => {
 
 export const handleIncomingCall = async (req, res) => {
   const twiml = new VoiceResponse();
+  const phone = req.query.phone;
 
-  const phone = req.query.phone; 
   const user = await prisma.callerLookup.findFirst({ where: { phone } });
 
   if (!user || !user.enableIVR) {
     twiml.say('IVR is currently disabled or user not found.');
     res.type('text/xml');
     return res.send(twiml.toString());
+  }
+
+  const isBlocked = user.blockedCalls === true;
+  const isUnknown = !user.callerName || user.callerName === "Unknown";
+
+  if ((isBlocked || isUnknown) && user.user_Id) {
+    const userInfo = await prisma.user.findUnique({
+      where: { id: user.user_Id },
+    });
+
+    if (userInfo?.fcmToken) {
+      let title = "📞 Incoming Call";
+      let body = `Caller: ${phone} tried to reach you.`;
+
+      if (isBlocked) {
+        title = "🚫 Blocked Caller Attempted";
+        body = `Blocked caller ${phone} tried calling you.`;
+      } else if (isUnknown) {
+        title = "❓ Unknown Caller";
+        body = `Unknown number ${phone} is trying to reach you.`;
+      }
+
+      const payload = {
+        notification: {
+          title,
+          body,
+        },
+        data: {
+          phone,
+          type: isBlocked ? "blocked" : "unknown",
+        },
+        token: userInfo.fcmToken,
+      };
+
+      try {
+        await admin.messaging().send(payload);
+        console.log("FCM Notification sent to user.");
+      } catch (error) {
+        console.error("Error sending FCM notification:", error.message);
+      }
+    }
   }
 
   const message =
@@ -47,6 +88,7 @@ export const handleIncomingCall = async (req, res) => {
   res.send(twiml.toString());
 };
 
+
 export const getCallDetails = async (req, res) => {
   const { userId, phone } = req.body;
 
@@ -54,6 +96,7 @@ export const getCallDetails = async (req, res) => {
     return res.status(400).json({
       status: false,
       message: "userId and phone are required",
+
     });
   }
 
@@ -300,3 +343,53 @@ export const getIVRSettingsByUserId = async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+
+cron.schedule("0 10 * * 1", async () => {
+  console.log("Weekly report cron job started...");
+
+  try {
+    const allUsers = await prisma.user.findMany({
+      where: {
+        fcmToken: {
+          not: null,
+        },
+      },
+    });
+
+    for (const user of allUsers) {
+      const data = await getWeeklyReportData(user.id);
+
+      const message = `
+📞 Weekly Call Report:
+- 🚫 Blocked Calls: ${data.callBlocksAutomaticly.count}
+- 🤷 Unknown Calls: ${data.totalUnknownCalls.count}
+- 📩 New Messages: ${data.MessageReceived.count}
+      `.trim();
+
+      const payload = {
+        notification: {
+          title: "Your Weekly Call Report",
+          body: message,
+        },
+        data: {
+          type: "weekly_report",
+          userId: user.id,
+        },
+        token: user.fcmToken,
+      };
+
+      try {
+        await admin.messaging().send(payload);
+        console.log(`Report sent to ${user.username}`);
+      } catch (err) {
+        console.error(
+          `Failed to send report to ${user.username}:`,
+          err.message
+        );
+      }
+    }
+  } catch (err) {
+    console.error("Weekly report cron job failed:", err.message);
+  }
+});

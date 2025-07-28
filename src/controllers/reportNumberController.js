@@ -12,6 +12,17 @@ export const reportPhoneNumber = async (req, res) => {
   }
 
   try {
+    const reporter = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!reporter) {
+      return res.status(404).json({
+        status: false,
+        message: "User not found",
+      });
+    }
+
     const report = await prisma.phoneNumberReport.create({
       data: {
         userId,
@@ -20,12 +31,32 @@ export const reportPhoneNumber = async (req, res) => {
       },
     });
 
+    if (reporter.fcmToken) {
+      const payload = {
+        notification: {
+          title: "🚨 Phone Number Reported",
+          body: `${reporter.username} (${reporter.phone}) reported ${phone}: "${content}"`,
+        },
+        data: {
+          reporterId: reporter.id,
+          reporterPhone: reporter.phone,
+          reportedPhone: phone,
+          reportContent: content,
+        },
+        token: reporter.fcmToken,
+      };
+
+      await admin.messaging().send(payload);
+      console.log("📤 Notification sent.");
+    }
+
     return res.status(201).json({
       status: true,
       message: "Report submitted successfully",
       data: report,
     });
   } catch (error) {
+    console.error("Error in reportPhoneNumber:", error.message);
     return res.status(500).json({
       status: false,
       message: "Internal server error",
