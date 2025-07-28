@@ -34,8 +34,8 @@ export const reportPhoneNumber = async (req, res) => {
     if (reporter.fcmToken) {
       const payload = {
         notification: {
-          title: "🚨 Phone Number Reported",
-          body: `${reporter.username} (${reporter.phone}) reported ${phone}: "${content}"`,
+          title: `${reporter.phone} is send a voice mail`,
+          body: `${content}`,
         },
         data: {
           reporterId: reporter.id,
