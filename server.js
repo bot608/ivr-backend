@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 import bodyParser from "body-parser";
 import admin from "firebase-admin";
 import fs from "fs";
+import { PrismaClient } from "@prisma/client";
 const serviceAccount = JSON.parse(
   fs.readFileSync(
     new URL("./src/config/serviceAccountKey.json", import.meta.url)
@@ -20,6 +21,8 @@ dotenv.config();
 const app = express();
 app.use(bodyParser.json());
 
+const prisma = new PrismaClient();
+
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
 });
@@ -32,5 +35,14 @@ app.use("/api", reportPhoneRoutes);
 app.use("/api", notificationRoutes);
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
+// Database connection check
+prisma.$connect()
+  .then(() => {
+    console.log("✅ Database connected successfully");
+  })
+  .catch((error) => {
+    console.error("❌ Database connection failed:", error);
+  });
+
+app.listen(PORT, () => console.log(`🚀 Server running on port ${PORT}`));
